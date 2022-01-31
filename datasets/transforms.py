@@ -203,7 +203,7 @@ class RandomTransformSpace(object):
             zmin = zmin
             zmax = zmax
 
-            # randomly sample a crop
+            # randomly sample a crop ???
             voxel_dim = list(data['tsdf_list_full'][0].shape)
             start = torch.Tensor([xmin, ymin, zmin]) - self.padding_start
             end = (-torch.Tensor(voxel_dim) * self.voxel_size +

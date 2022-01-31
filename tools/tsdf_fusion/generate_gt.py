@@ -54,7 +54,7 @@ def save_tsdf_full(args, scene_path, cam_intr, depth_list, cam_pose_list, color_
     vol_bnds = np.zeros((3, 2))
 
     n_imgs = len(depth_list.keys())
-    if n_imgs > 200:
+    if n_imgs > 200:  # They maxmum of 200 frames for fusion
         ind = np.linspace(0, n_imgs - 1, 200).astype(np.int32)
         image_id = np.array(list(depth_list.keys()))[ind]
     else:
@@ -62,7 +62,7 @@ def save_tsdf_full(args, scene_path, cam_intr, depth_list, cam_pose_list, color_
     for id in image_id:
         depth_im = depth_list[id]
         cam_pose = cam_pose_list[id]
-
+        # TODO: we can also use this to compute the volume bound
         # Compute camera view frustum and extend convex hull
         view_frust_pts = get_view_frustum(depth_im, cam_intr, cam_pose)
         vol_bnds[:, 0] = np.minimum(vol_bnds[:, 0], np.amin(view_frust_pts, axis=1))
@@ -135,21 +135,21 @@ def save_fragment_pkl(args, scene, cam_intr, depth_list, cam_pose_list):
     vol_bnds[:, 0] = np.inf
     vol_bnds[:, 1] = -np.inf
 
-    all_ids = []
-    ids = []
-    all_bnds = []
+    all_ids = []  # all fragments
+    ids = []  # all frame ids within a fragment
+    all_bnds = []  # volume bounds of all fragments
     count = 0
     last_pose = None
-    for id in depth_list.keys():
+    for id in depth_list.keys():  # all the frames in the scene
         depth_im = depth_list[id]
         cam_pose = cam_pose_list[id]
 
-        if count == 0:
+        if count == 0:  # start of a new fragment
             ids.append(id)
             vol_bnds = np.zeros((3, 2))
             vol_bnds[:, 0] = np.inf
             vol_bnds[:, 1] = -np.inf
-            last_pose = cam_pose
+            last_pose = cam_pose  # pose of the first frame in the fragment
             # Compute camera view frustum and extend convex hull
             view_frust_pts = get_view_frustum(depth_im, cam_intr, cam_pose)
             vol_bnds[:, 0] = np.minimum(vol_bnds[:, 0], np.amin(view_frust_pts, axis=1))
@@ -160,15 +160,15 @@ def save_fragment_pkl(args, scene, cam_intr, depth_list, cam_pose_list):
                 ((np.linalg.inv(cam_pose[:3, :3]) @ last_pose[:3, :3] @ np.array([0, 0, 1]).T) * np.array(
                     [0, 0, 1])).sum())
             dis = np.linalg.norm(cam_pose[:3, 3] - last_pose[:3, 3])
-            if angle > (args.min_angle / 180) * np.pi or dis > args.min_distance:
-                ids.append(id)
+            if angle > (args.min_angle / 180) * np.pi or dis > args.min_distance:  # create a new keyframe
+                ids.append(id)  # add to the fragment
                 last_pose = cam_pose
                 # Compute camera view frustum and extend convex hull
                 view_frust_pts = get_view_frustum(depth_im, cam_intr, cam_pose)
                 vol_bnds[:, 0] = np.minimum(vol_bnds[:, 0], np.amin(view_frust_pts, axis=1))
                 vol_bnds[:, 1] = np.maximum(vol_bnds[:, 1], np.amax(view_frust_pts, axis=1))
                 count += 1
-                if count == args.window_size:
+                if count == args.window_size:  # create a new fragment if reaches window size
                     all_ids.append(ids)
                     all_bnds.append(vol_bnds)
                     ids = []
@@ -184,7 +184,7 @@ def save_fragment_pkl(args, scene, cam_intr, depth_list, cam_pose_list):
         fragments.append({
             'scene': scene,
             'fragment_id': i,
-            'image_ids': all_ids[i],
+            'image_ids': all_ids[i],  # frame ids
             'vol_origin': tsdf_info['vol_origin'],
             'voxel_size': tsdf_info['voxel_size'],
         })
@@ -196,6 +196,7 @@ def save_fragment_pkl(args, scene, cam_intr, depth_list, cam_pose_list):
 @ray.remote(num_cpus=args.num_workers + 1, num_gpus=(1 / args.n_proc))
 def process_with_single_worker(args, scannet_files):
     for scene in tqdm(scannet_files):
+        # each scene has a fragments.pkl file
         if os.path.exists(os.path.join(args.save_path, scene, 'fragments.pkl')):
             continue
         print('read from disk')
@@ -208,6 +209,7 @@ def process_with_single_worker(args, scannet_files):
             n_imgs = len(os.listdir(os.path.join(args.data_path, scene, 'color')))
             intrinsic_dir = os.path.join(args.data_path, scene, 'intrinsic', 'intrinsic_depth.txt')
             cam_intr = np.loadtxt(intrinsic_dir, delimiter=' ')[:3, :3]
+            # dataset for a single scene
             dataset = ScanNetDataset(n_imgs, scene, args.data_path, args.max_depth)
 
         dataloader = torch.utils.data.DataLoader(dataset, batch_size=None, collate_fn=collate_fn,
@@ -223,6 +225,7 @@ def process_with_single_worker(args, scannet_files):
             cam_pose_all.update({id: cam_pose})
             # color_all.update({id: color_image})
 
+        # save tsdf volume for the entrie scene, but several fragments for thw frames
         save_tsdf_full(args, scene, cam_intr, depth_all, cam_pose_all, color_all, save_mesh=False)
         save_fragment_pkl(args, scene, cam_intr, depth_all, cam_pose_all)
 
@@ -243,7 +246,7 @@ def generate_pkl(args):
     else:
         splits = ['test']
     for split in splits:
-        fragments = []
+        fragments = []  # collect all the fragments in all the scenes
         with open(os.path.join(args.save_path, 'splits', 'scannetv2_{}.txt'.format(split))) as f:
             split_files = f.readlines()
         for scene in all_scenes:

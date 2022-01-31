@@ -11,7 +11,7 @@ class ScanNetDataset(Dataset):
         super(ScanNetDataset, self).__init__()
         self.datapath = datapath
         self.mode = mode
-        self.n_views = nviews
+        self.n_views = nviews  # this n_views corresponds to KF window size
         self.transforms = transforms
         self.tsdf_file = 'all_tsdf_{}'.format(self.n_views)
 
@@ -29,11 +29,11 @@ class ScanNetDataset(Dataset):
 
     def build_list(self):
         with open(os.path.join(self.datapath, self.tsdf_file, 'fragments_{}.pkl'.format(self.mode)), 'rb') as f:
-            metas = pickle.load(f)
+            metas = pickle.load(f)  # load all the fragments
         return metas
 
     def __len__(self):
-        return len(self.metas)
+        return len(self.metas)  # number of fragments in total
 
     def read_cam_file(self, filepath, vid):
         intrinsics = np.loadtxt(os.path.join(filepath, 'intrinsic', 'intrinsic_color.txt'), delimiter=' ')[:3, :3]
@@ -67,7 +67,7 @@ class ScanNetDataset(Dataset):
         return self.tsdf_cashe[scene]
 
     def __getitem__(self, idx):
-        meta = self.metas[idx]
+        meta = self.metas[idx]  # fragment by global id
 
         imgs = []
         depth = []
@@ -97,6 +97,7 @@ class ScanNetDataset(Dataset):
         intrinsics = np.stack(intrinsics_list)
         extrinsics = np.stack(extrinsics_list)
 
+        # frgments images, depths, poses and scene tsdf volume
         items = {
             'imgs': imgs,
             'depth': depth,
