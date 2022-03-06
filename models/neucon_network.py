@@ -114,6 +114,7 @@ class NeuConNet(nn.Module):
 
             if i == 0:
                 # ----generate new coords----
+                # This seems to be global volume
                 coords = generate_grid(self.cfg.N_VOX, interval)[0]
                 up_coords = []
                 for b in range(bs):

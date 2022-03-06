@@ -40,7 +40,7 @@ class NeuralRecon(nn.Module):
             'vol_origin':              (Tensor), origin of the full voxel volume (xyz position of voxel (0, 0, 0)),
                                     (batch size, 3)
             'vol_origin_partial':      (Tensor), origin of the partial voxel volume (xyz position of voxel (0, 0, 0)),
-                                    (batch size, 3)
+                                    (batch size, 3) fragments???
             'world_to_aligned_camera': (Tensor), matrices: transform from world coords to aligned camera coords,
                                     (batch size, number of views, 4, 4)
             'proj_matrices':           (Tensor), projection matrix,

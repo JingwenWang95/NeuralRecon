@@ -34,8 +34,8 @@ def parse_args():
     parser.add_argument('--min_distance', default=0.1, type=float)
 
     # ray multi processes
-    parser.add_argument('--n_proc', type=int, default=16, help='#processes launched to process scenes.')
-    parser.add_argument('--n_gpu', type=int, default=2, help='#number of gpus')
+    parser.add_argument('--n_proc', type=int, default=8, help='#processes launched to process scenes.')
+    parser.add_argument('--n_gpu', type=int, default=1, help='#number of gpus')
     parser.add_argument('--num_workers', type=int, default=8)
     parser.add_argument('--loader_num_workers', type=int, default=8)
     return parser.parse_args()
@@ -77,7 +77,7 @@ def save_tsdf_full(args, scene_path, cam_intr, depth_list, cam_pose_list, color_
     tsdf_vol_list = []
     for l in range(args.num_layers):
         tsdf_vol_list.append(TSDFVolume(vol_bnds, voxel_size=args.voxel_size * 2 ** l, margin=args.margin))
-
+    print(args.margin)
     # Loop through RGB-D images and fuse them together
     t0_elapse = time.time()
     for id in depth_list.keys():
@@ -93,6 +93,7 @@ def save_tsdf_full(args, scene_path, cam_intr, depth_list, cam_pose_list, color_
         # Integrate observation into voxel volume (assume color aligned with depth)
         for l in range(args.num_layers):
             tsdf_vol_list[l].integrate(color_image, depth_im, cam_intr, cam_pose, obs_weight=1.)
+        print(depth_im.shape, cam_intr.shape, cam_pose.shape)
 
     fps = n_imgs / (time.time() - t0_elapse)
     print("Average FPS: {:.2f}".format(fps))
@@ -262,7 +263,7 @@ def generate_pkl(args):
 
 
 if __name__ == "__main__":
-    all_proc = args.n_proc * args.n_gpu
+    all_proc = 1  # args.n_proc * args.n_gpu
 
     ray.init(num_cpus=all_proc * (args.num_workers + 1), num_gpus=args.n_gpu)
 
@@ -271,7 +272,7 @@ if __name__ == "__main__":
             args.data_path = os.path.join(args.data_path, 'scans')
         else:
             args.data_path = os.path.join(args.data_path, 'scans_test')
-        files = sorted(os.listdir(args.data_path))
+        files = sorted(os.listdir(args.data_path))[:20]
     else:
         raise NameError('error!')
 
