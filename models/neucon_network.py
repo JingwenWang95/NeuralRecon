@@ -205,9 +205,15 @@ class NeuConNet(nn.Module):
 
             pre_feat = torch.cat([pre_feat, pre_tsdf, pre_occ], dim=1)
 
-            if i == self.cfg.N_LAYER - 1:
-                outputs['coords'] = pre_coords
-                outputs['tsdf'] = pre_tsdf
+            if i == self.cfg.N_LAYER - 1:  # fine???
+                outputs['coords_fine'] = pre_coords
+                outputs['tsdf_fine'] = pre_tsdf
+            if i == self.cfg.N_LAYER - 2:  # mid
+                outputs['coords_mid'] = pre_coords
+                outputs['tsdf_mid'] = pre_tsdf
+            if i == self.cfg.N_LAYER - 3:  # coarse
+                outputs['coords_coarse'] = pre_coords
+                outputs['tsdf_coarse'] = pre_tsdf
 
         return outputs, loss_dict
 

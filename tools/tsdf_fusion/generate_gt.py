@@ -19,6 +19,8 @@ def parse_args():
     parser.add_argument("--dataset", default='scannet')
     parser.add_argument("--data_path", metavar="DIR",
                         help="path to raw dataset", default='/data/scannet/output/')
+    # parser.add_argument("--save_path", metavar="DIR",
+    #                     help="save path", default='/media/jingwen/Data/neuralrecon/scannet')
     parser.add_argument("--save_name", metavar="DIR",
                         help="file name", default='all_tsdf')
     parser.add_argument('--test', action='store_true',
@@ -93,7 +95,7 @@ def save_tsdf_full(args, scene_path, cam_intr, depth_list, cam_pose_list, color_
         # Integrate observation into voxel volume (assume color aligned with depth)
         for l in range(args.num_layers):
             tsdf_vol_list[l].integrate(color_image, depth_im, cam_intr, cam_pose, obs_weight=1.)
-        print(depth_im.shape, cam_intr.shape, cam_pose.shape)
+        # print(depth_im.shape, cam_intr.shape, cam_pose.shape)
 
     fps = n_imgs / (time.time() - t0_elapse)
     print("Average FPS: {:.2f}".format(fps))
@@ -227,7 +229,7 @@ def process_with_single_worker(args, scannet_files):
             # color_all.update({id: color_image})
 
         # save tsdf volume for the entrie scene, but several fragments for thw frames
-        save_tsdf_full(args, scene, cam_intr, depth_all, cam_pose_all, color_all, save_mesh=False)
+        save_tsdf_full(args, scene, cam_intr, depth_all, cam_pose_all, color_all, save_mesh=True)
         save_fragment_pkl(args, scene, cam_intr, depth_all, cam_pose_all)
 
 
@@ -272,7 +274,7 @@ if __name__ == "__main__":
             args.data_path = os.path.join(args.data_path, 'scans')
         else:
             args.data_path = os.path.join(args.data_path, 'scans_test')
-        files = sorted(os.listdir(args.data_path))[:20]
+        files = sorted(os.listdir(args.data_path))
     else:
         raise NameError('error!')
 

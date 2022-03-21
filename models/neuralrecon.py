@@ -31,7 +31,7 @@ class NeuralRecon(nn.Module):
         """ Normalizes the RGB images to the input range"""
         return (x - self.pixel_mean.type_as(x)) / self.pixel_std.type_as(x)
 
-    def forward(self, inputs, save_mesh=False):
+    def forward(self, inputs, save_mesh=False, level="fine"):
         '''
 
         :param inputs: dict: {
@@ -82,8 +82,14 @@ class NeuralRecon(nn.Module):
         outputs, loss_dict = self.neucon_net(features, inputs, outputs)
 
         # fuse to global volume.
-        if not self.training and 'coords' in outputs.keys():
-            outputs = self.fuse_to_global(outputs['coords'], outputs['tsdf'], inputs, self.n_scales, outputs, save_mesh)
+        if not self.training:  # and 'coords' in outputs.keys():
+            # 0: coarse, 1: mid, 2: fine
+            if level == "fine":
+                outputs = self.fuse_to_global(outputs['coords_fine'], outputs['tsdf_fine'], inputs, self.n_scales, outputs, save_mesh)
+            if level == "mid":
+                outputs = self.fuse_to_global(outputs['coords_mid'], outputs['tsdf_mid'], inputs, self.n_scales - 1, outputs, save_mesh)
+            if level == "coarse":
+                outputs = self.fuse_to_global(outputs['coords_coarse'], outputs['tsdf_coarse'], inputs, self.n_scales - 2, outputs, save_mesh)
 
         # gather loss.
         print_loss = 'Loss: '

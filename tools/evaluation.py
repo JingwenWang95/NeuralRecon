@@ -45,9 +45,9 @@ def parse_args():
     parser.add_argument('--max_depth', default=10., type=float,
                         help='mask out large depth values since they are noisy')
     parser.add_argument("--data_path", metavar="DIR",
-                        help="path to dataset", default='./data/scannet/scans_test')
+                        help="path to dataset", default='/media/jingwen/Data/scannet/scans_test')
     parser.add_argument("--gt_path", metavar="DIR",
-                        help="path to raw dataset", default='/data/scannet/scannet/scans_test')
+                        help="path to raw dataset", default='/media/jingwen/Data/scannet/scans_test')
 
     # ray config
     parser.add_argument('--n_proc', type=int, default=2, help='#processes launched to process scenes.')

@@ -209,7 +209,7 @@ class GRUFusion(nn.Module):
             self.global_volume[scale] = self.global_volume[scale].detach()
 
         batch_size = len(inputs['fragment'])
-        interval = 2 ** (self.cfg.N_LAYER - scale - 1)
+        interval = 2 ** (self.cfg.N_LAYER - scale - 1)  # 0: fine, 1: mid, 2: coarse
 
         tsdf_target_all = None
         occ_target_all = None

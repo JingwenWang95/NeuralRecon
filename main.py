@@ -222,7 +222,7 @@ def train():
                 "{}/model_{:0>6}.ckpt".format(cfg.LOGDIR, epoch_idx))
 
 
-def test(from_latest=False):
+def test(from_latest=False, level="coarse"):
     ckpt_list = []
     while True:
         saved_models = [fn for fn in os.listdir(cfg.LOGDIR) if fn.endswith(".ckpt")]
@@ -242,7 +242,7 @@ def test(from_latest=False):
                 TestImgLoader.dataset.tsdf_cashe = {}
 
                 avg_test_scalars = DictAverageMeter()
-                save_mesh_scene = SaveScene(cfg)
+                save_mesh_scene = SaveScene(cfg, level=level)
                 batch_len = len(TestImgLoader)
                 for batch_idx, sample in enumerate(TestImgLoader):
                     for n in sample['fragment']:
@@ -251,7 +251,7 @@ def test(from_latest=False):
                     save_scene = cfg.SAVE_SCENE_MESH and batch_idx == batch_len - 1
 
                     start_time = time.time()
-                    loss, scalar_outputs, outputs = test_sample(sample, save_scene)
+                    loss, scalar_outputs, outputs = test_sample(sample, save_scene, level=level)
                     logger.info('Epoch {}, Iter {}/{}, test loss = {:.3f}, time = {:3f}'.format(epoch_idx, batch_idx,
                                                                                                 len(TestImgLoader),
                                                                                                 loss,
@@ -287,10 +287,10 @@ def train_sample(sample):
 
 
 @make_nograd_func
-def test_sample(sample, save_scene=False):
+def test_sample(sample, save_scene=False, level="fine"):
     model.eval()
 
-    outputs, loss_dict = model(sample, save_scene)
+    outputs, loss_dict = model(sample, save_scene, level=level)
     loss = loss_dict['total_loss']
 
     return tensor2float(loss), tensor2float(loss_dict), outputs

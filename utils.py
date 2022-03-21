@@ -183,7 +183,7 @@ def sparse_to_dense_np(locs, values, dim, default_val):
 
 
 class SaveScene(object):
-    def __init__(self, cfg):
+    def __init__(self, cfg, level="fine"):
         self.cfg = cfg
         log_dir = cfg.LOGDIR.split('/')[-1]
         self.log_dir = os.path.join('results', 'scene_' + cfg.DATASET + '_' + log_dir)
@@ -195,6 +195,12 @@ class SaveScene(object):
         self.coords = None
 
         self.keyframe_id = None
+
+        self.scale = 1
+        if level == "mid":
+            self.scale *= 2
+        if level == "coarse":
+            self.scale *= 4
 
         if cfg.VIS_INCREMENTAL:
             self.vis = Visualizer()
@@ -274,10 +280,10 @@ class SaveScene(object):
             logger.warning('No valid data for scene {}'.format(self.scene_name))
         else:
             # Marching cubes
-            mesh = self.tsdf2mesh(self.cfg.MODEL.VOXEL_SIZE, origin, tsdf_volume)
+            mesh = self.tsdf2mesh(self.cfg.MODEL.VOXEL_SIZE * self.scale, origin, tsdf_volume)
             # save tsdf volume for atlas evaluation
             data = {'origin': origin,
-                    'voxel_size': self.cfg.MODEL.VOXEL_SIZE,
+                    'voxel_size': self.cfg.MODEL.VOXEL_SIZE * self.scale,
                     'tsdf': tsdf_volume}
             save_path = '{}_fusion_eval_{}'.format(self.log_dir, epoch)
             if not os.path.exists(save_path):
