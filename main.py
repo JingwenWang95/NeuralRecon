@@ -92,8 +92,8 @@ if cfg.MODE == 'train':
     n_views = cfg.TRAIN.N_VIEWS
     random_rotation = cfg.TRAIN.RANDOM_ROTATION_3D
     random_translation = cfg.TRAIN.RANDOM_TRANSLATION_3D
-    paddingXY = cfg.TRAIN.PAD_XY_3D
-    paddingZ = cfg.TRAIN.PAD_Z_3D
+    paddingXY = cfg.TRAIN.PAD_XY_3D  # 0.1
+    paddingZ = cfg.TRAIN.PAD_Z_3D  # 0.025
 else:
     n_views = cfg.TEST.N_VIEWS
     random_rotation = False
@@ -187,8 +187,8 @@ def train():
     logger.info("start at epoch {}".format(start_epoch))
     logger.info('Number of model parameters: {}'.format(sum([p.data.nelement() for p in model.parameters()])))
 
-    milestones = [int(epoch_idx) for epoch_idx in cfg.TRAIN.LREPOCHS.split(':')[0].split(',')]
-    lr_gamma = 1 / float(cfg.TRAIN.LREPOCHS.split(':')[1])
+    milestones = [int(epoch_idx) for epoch_idx in cfg.TRAIN.LREPOCHS.split(':')[0].split(',')]  # 12, 24, 48
+    lr_gamma = 1 / float(cfg.TRAIN.LREPOCHS.split(':')[1])  # 1/2
     lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones, gamma=lr_gamma,
                                                         last_epoch=start_epoch - 1)
 

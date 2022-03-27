@@ -36,7 +36,7 @@ class NeuralRecon(nn.Module):
 
         :param inputs: dict: {
             'imgs':                    (Tensor), images,
-                                    (batch size, number of views, C, H, W)
+                                    (batch size, number of views, C, H, W)  [1, 9, 3, 480, 640]
             'vol_origin':              (Tensor), origin of the full voxel volume (xyz position of voxel (0, 0, 0)),
                                     (batch size, 3)
             'vol_origin_partial':      (Tensor), origin of the partial voxel volume (xyz position of voxel (0, 0, 0)),
@@ -75,6 +75,8 @@ class NeuralRecon(nn.Module):
 
         # image feature extraction
         # in: images; out: feature maps
+        # features[n_views][3]:
+        # e.g. features[0]: [[1, 24, 120, 160], [1, 40, 60, 80], [1, 80, 30, 40]]
         features = [self.backbone2d(self.normalizer(img)) for img in imgs]
 
         # coarse-to-fine decoder: SparseConv and GRU Fusion.

@@ -63,34 +63,36 @@ class IntrinsicsPoseToProjection(object):
 
     def rotate_view_to_align_xyplane(self, Tr_camera_to_world):
         # world space normal [0, 0, 1]  camera space normal [0, -1, 0]
-        z_c = np.dot(np.linalg.inv(Tr_camera_to_world), np.array([0, 0, 1, 0]))[: 3]
-        axis = np.cross(z_c, np.array([0, -1, 0]))
-        axis = axis / np.linalg.norm(axis)
-        theta = np.arccos(-z_c[1] / (np.linalg.norm(z_c)))
+        z_c = np.dot(np.linalg.inv(Tr_camera_to_world), np.array([0, 0, 1, 0]))[: 3]  # 3rd column of Tcw, i.e. world-z's coordinate under camera frame
+        axis = np.cross(z_c, np.array([0, -1, 0]))  # perpendicular to both camera-up and world-z
+        axis = axis / np.linalg.norm(axis)  # rotation axis
+        theta = np.arccos(-z_c[1] / (np.linalg.norm(z_c)))  # rotation angle
         quat = transforms3d.quaternions.axangle2quat(axis, theta)
         rotation_matrix = transforms3d.quaternions.quat2mat(quat)
         return rotation_matrix
 
     def __call__(self, data):
-        middle_pose = data['extrinsics'][self.nviews // 2]
+        # Here extrinsics are already Tw'c
+        middle_pose = data['extrinsics'][self.nviews // 2]  # Twc
         rotation_matrix = self.rotate_view_to_align_xyplane(middle_pose)
         rotation_matrix4x4 = np.eye(4)
-        rotation_matrix4x4[:3, :3] = rotation_matrix
-        data['world_to_aligned_camera'] = torch.from_numpy(rotation_matrix4x4).float() @ middle_pose.inverse()
+        rotation_matrix4x4[:3, :3] = rotation_matrix  # Tc'c: camera to aligned_camera
+        data['world_to_aligned_camera'] = torch.from_numpy(rotation_matrix4x4).float() @ middle_pose.inverse()  # Tc'c @ Tcw'
 
+        # TODO: So projection matrix is using raw poses. Then what is "world_to_aligned_camera" for?
         proj_matrices = []
         for intrinsics, extrinsics in zip(data['intrinsics'], data['extrinsics']):
             view_proj_matrics = []
             for i in range(3):
                 # from (camera to world) to (world to camera)
-                proj_mat = torch.inverse(extrinsics.data.cpu())
-                scale_intrinsics = intrinsics / self.stride / 2 ** i
+                proj_mat = torch.inverse(extrinsics.data.cpu())  # Tcw  [4, 4]
+                scale_intrinsics = intrinsics / self.stride / 2 ** i  # stride = 4 -> 1/4, 1/8, 1/16
                 scale_intrinsics[-1, -1] = 1
                 proj_mat[:3, :4] = scale_intrinsics @ proj_mat[:3, :4]
                 view_proj_matrics.append(proj_mat)
-            view_proj_matrics = torch.stack(view_proj_matrics)
+            view_proj_matrics = torch.stack(view_proj_matrics)  # [3, 4, 4]
             proj_matrices.append(view_proj_matrics)
-        data['proj_matrices'] = torch.stack(proj_matrices)
+        data['proj_matrices'] = torch.stack(proj_matrices)  # [n_views, 3, 4, 4]
         data.pop('intrinsics')
         data.pop('extrinsics')
         return data
@@ -156,7 +158,7 @@ class RandomTransformSpace(object):
             max_depth: maximum depth
         """
 
-        self.voxel_dim = voxel_dim
+        self.voxel_dim = voxel_dim  # [96, 96, 96]
         self.origin = origin
         self.voxel_size = voxel_size
         self.random_rotation = random_rotation
@@ -167,11 +169,11 @@ class RandomTransformSpace(object):
         self.padding_end = torch.Tensor([paddingXY, paddingXY, 0])
 
         # each epoch has the same transformation
-        self.random_r = torch.rand(max_epoch)
+        self.random_r = torch.rand(max_epoch)  # [0, 1)
         self.random_t = torch.rand((max_epoch, 3))
 
     def __call__(self, data):
-        origin = torch.Tensor(data['vol_origin'])
+        origin = torch.Tensor(data['vol_origin'])  # global volume origin
         if (not self.random_rotation) and (not self.random_translation):
             T = torch.eye(4)
         else:
@@ -185,15 +187,15 @@ class RandomTransformSpace(object):
                               [np.sin(r), np.cos(r)]], dtype=torch.float32)
 
             # get corners of bounding volume
-            voxel_dim_old = torch.tensor(data['tsdf_list_full'][0].shape) * self.voxel_size
+            voxel_dim_old = torch.tensor(data['tsdf_list_full'][0].shape) * self.voxel_size  # global volume dimension, in Euclidean space
             xmin, ymin, zmin = origin
             xmax, ymax, zmax = origin + voxel_dim_old
 
             corners2d = torch.tensor([[xmin, xmin, xmax, xmax],
                                       [ymin, ymax, ymin, ymax]], dtype=torch.float32)
 
-            # rotate corners in plane
-            corners2d = R @ corners2d
+            # rotate corners in plane (around [0, 0, 0])
+            corners2d = R @ corners2d  # [2, 4]
 
             # get new bounding volume (add padding for data augmentation)
             xmin = corners2d[0].min()
@@ -203,15 +205,19 @@ class RandomTransformSpace(object):
             zmin = zmin
             zmax = zmax
 
-            # randomly sample a crop ???
-            voxel_dim = list(data['tsdf_list_full'][0].shape)
-            start = torch.Tensor([xmin, ymin, zmin]) - self.padding_start
+            voxel_dim = list(data['tsdf_list_full'][0].shape)  # old dimension
+            # self.padding_start: paddingX, paddingY, paddingZ = 0.1, 0.1, 0.025
+            start = torch.Tensor([xmin, ymin, zmin]) - self.padding_start  # new lower bound
             end = (-torch.Tensor(voxel_dim) * self.voxel_size +
-                   torch.Tensor([xmax, ymax, zmax]) + self.padding_end)
+                   torch.Tensor([xmax, ymax, zmax]) + self.padding_end)  # new upper bound - old_dim
             if self.random_translation:
                 t = self.random_t[data['epoch'][0]]
             else:
                 t = .5
+            # TODO: Not 100% sure if my understanding is correct
+            # 0: end - origin -> align new upper corner to old upper corner
+            # 1: start - origin -> align new lower corner to old lower corner
+            # [0, 1] interpolate between those two translation
             t = t * start + (1 - t) * end - origin
 
             T = torch.eye(4)
@@ -219,11 +225,17 @@ class RandomTransformSpace(object):
             T[:2, :2] = R
             T[:3, 3] = -t
 
+        # TODO: here transform is applied to gt camera poses
         for i in range(len(data['extrinsics'])):
+            # So the actual meaning of T is world to transformed world: Tw'w
+            # extrinsic becomes Tw'c = Tw'w @ Twc, w: original world, w' transformed world
+            # Rw'w[:2, :2] = R, tw'w = -t
             data['extrinsics'][i] = T @ data['extrinsics'][i]
 
-        data['vol_origin'] = torch.tensor(self.origin, dtype=torch.float, device=T.device)
+        # new volume origin is always (0, 0, 0)
+        data['vol_origin'] = torch.tensor(self.origin, dtype=torch.float, device=T.device)  # change origin to (0, 0, 0)
 
+        # Here the transform matrix is Tww': transformed world to world
         data = self.transform(data, T.inverse(), old_origin=origin)
 
         return data
@@ -251,10 +263,11 @@ class RandomTransformSpace(object):
         bnds[:, 0] = np.inf
         bnds[:, 1] = -np.inf
 
-        for i in range(data['imgs'].shape[0]):
+        for i in range(data['imgs'].shape[0]):  # 0 - 8
             size = data['imgs'][i].shape[1:]
             cam_intr = data['intrinsics'][i]
-            cam_pose = data['extrinsics'][i]
+            cam_pose = data['extrinsics'][i]  # Tw'c: c2w'
+            # Now everything is under transformed world
             view_frust_pts = get_view_frustum(self.max_depth, size, cam_intr, cam_pose)
             bnds[:, 0] = torch.min(bnds[:, 0], torch.min(view_frust_pts, dim=1)[0])
             bnds[:, 1] = torch.max(bnds[:, 1], torch.max(view_frust_pts, dim=1)[0])
@@ -262,36 +275,41 @@ class RandomTransformSpace(object):
         # -------adjust volume bounds-------
         num_layers = 3
         center = (torch.tensor(((bnds[0, 1] + bnds[0, 0]) / 2, (bnds[1, 1] + bnds[1, 0]) / 2, -0.2)) - data[
-            'vol_origin']) / self.voxel_size
+            'vol_origin']) / self.voxel_size  # offset of the fragment centre wrt the voxel at (0, 0, 0), in voxel space
+        # This is similar to ours
         center[:2] = torch.round(center[:2] / 2 ** num_layers) * 2 ** num_layers
         center[2] = torch.floor(center[2] / 2 ** num_layers) * 2 ** num_layers
         origin = torch.zeros_like(center)
+        # TODO: note they are not using real fragment dimension !!!
+        #  Instead they always use [96, 96, 96] centred at fragment centre
         origin[:2] = center[:2] - torch.tensor(self.voxel_dim[:2]) // 2
-        origin[2] = center[2]
-        vol_origin_partial = origin * self.voxel_size + data['vol_origin']
+        origin[2] = center[2]  # so origin is lower corner in xy, but centre in z
+        vol_origin_partial = origin * self.voxel_size + data['vol_origin']  # fragment volume origin in Euclidean space
 
         data['vol_origin_partial'] = vol_origin_partial
 
         # ------get partial tsdf and occupancy ground truth--------
         if 'tsdf_list_full' in data.keys():
             # -------------grid coordinates------------------
-            old_origin = old_origin.view(1, 3)
+            old_origin = old_origin.view(1, 3)  # old global volume origin, in Euclidean space
 
-            x, y, z = self.voxel_dim
-            coords = coordinates(self.voxel_dim, device=old_origin.device)
-            world = coords.type(torch.float) * self.voxel_size + vol_origin_partial.view(3, 1)
-            world = torch.cat((world, torch.ones_like(world[:1])), dim=0)
-            world = transform[:3, :] @ world
-            coords = (world - old_origin.T) / self.voxel_size
+            x, y, z = self.voxel_dim  # [96, 96, 96]
+            coords = coordinates(self.voxel_dim, device=old_origin.device)  # voxel grid [3, 96, 96, 96], in voxel space
+            world = coords.type(torch.float) * self.voxel_size + vol_origin_partial.view(3, 1)  # Euclidean space
+            world = torch.cat((world, torch.ones_like(world[:1])), dim=0)  # [4, 96, 96, 96]
+            world = transform[:3, :] @ world  # Euclidean coords in original world
+            coords = (world - old_origin.T) / self.voxel_size  # Voxel coords in original volume (not rounded)
 
             data['tsdf_list'] = []
             data['occ_list'] = []
 
             for l, tsdf_s in enumerate(data['tsdf_list_full']):
                 # ------get partial tsdf and occ-------
-                vol_dim_s = torch.tensor(self.voxel_dim) // 2 ** l
+                vol_dim_s = torch.tensor(self.voxel_dim) // 2 ** l  # fine, mid, coarse
                 tsdf_vol = TSDFVolumeTorch(vol_dim_s, vol_origin_partial,
                                            voxel_size=self.voxel_size * 2 ** l, margin=3)
+                # TODO: So this is just to obtain gt occupancy values?
+                # perform tsdf fusion on the fly
                 for i in range(data['imgs'].shape[0]):
                     depth_im = data['depth'][i]
                     cam_intr = data['intrinsics'][i]
@@ -299,10 +317,11 @@ class RandomTransformSpace(object):
 
                     tsdf_vol.integrate(depth_im, cam_intr, cam_pose, obs_weight=1.)
 
-                tsdf_vol, weight_vol = tsdf_vol.get_volume()
+                tsdf_vol, weight_vol = tsdf_vol.get_volume()  # [96, 96, 96], [48, 48, 48], [24, 24, 24]
                 occ_vol = torch.zeros_like(tsdf_vol).bool()
                 occ_vol[(tsdf_vol < 0.999) & (tsdf_vol > -0.999) & (weight_vol > 1)] = True
 
+                # Get fragment TSDF grids from global grids
                 # grid sample expects coords in [-1,1]
                 coords_world_s = coords.view(3, x, y, z)[:, ::2 ** l, ::2 ** l, ::2 ** l] / 2 ** l
                 dim_s = list(coords_world_s.shape[1:])
@@ -310,6 +329,7 @@ class RandomTransformSpace(object):
 
                 old_voxel_dim = list(tsdf_s.shape)
 
+                # convert to [-1, 1]
                 coords_world_s = 2 * coords_world_s / (torch.Tensor(old_voxel_dim) - 1).view(3, 1) - 1
                 coords_world_s = coords_world_s[[2, 1, 0]].T.view([1] + dim_s + [3])
 
@@ -324,6 +344,7 @@ class RandomTransformSpace(object):
                     align_corners=align_corners
                 ).squeeze()
                 mask = tsdf_vol.abs() < 1
+                # Only perform tri-linear interpolation within truncation region
                 tsdf_vol[mask] = tsdf_vol_bilin[mask]
 
                 # padding_mode='ones' does not exist for grid_sample so replace
@@ -346,9 +367,9 @@ class RandomTransformSpace(object):
 def rigid_transform(xyz, transform):
     """Applies a rigid transform to an (N, 3) pointcloud.
     """
-    xyz_h = torch.cat([xyz, torch.ones((len(xyz), 1))], dim=1)
+    xyz_h = torch.cat([xyz, torch.ones((len(xyz), 1))], dim=1)  # [N, 4]
     xyz_t_h = (transform @ xyz_h.T).T
-    return xyz_t_h[:, :3]
+    return xyz_t_h[:, :3]  # [N, 3]
 
 
 def get_view_frustum(max_depth, size, cam_intr, cam_pose):
@@ -360,11 +381,11 @@ def get_view_frustum(max_depth, size, cam_intr, cam_pose):
     view_frust_pts = torch.stack([
         (torch.tensor([0, 0, 0, im_w, im_w]) - cam_intr[0, 2]) * torch.tensor(
             [0, max_depth, max_depth, max_depth, max_depth]) /
-        cam_intr[0, 0],
+        cam_intr[0, 0],  # (x - cx) / fx * z
         (torch.tensor([0, 0, im_h, 0, im_h]) - cam_intr[1, 2]) * torch.tensor(
             [0, max_depth, max_depth, max_depth, max_depth]) /
-        cam_intr[1, 1],
-        torch.tensor([0, max_depth, max_depth, max_depth, max_depth])
-    ])
+        cam_intr[1, 1],  # (y - cy) / fy * z
+        torch.tensor([0, max_depth, max_depth, max_depth, max_depth])  # z
+    ])  # [3, 5]
     view_frust_pts = rigid_transform(view_frust_pts.T, cam_pose).T
     return view_frust_pts

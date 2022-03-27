@@ -101,10 +101,10 @@ class ScanNetDataset(Dataset):
         items = {
             'imgs': imgs,
             'depth': depth,
-            'intrinsics': intrinsics,
-            'extrinsics': extrinsics,
-            'tsdf_list_full': tsdf_list,
-            'vol_origin': meta['vol_origin'],
+            'intrinsics': intrinsics,  # [n_views, 3, 3]
+            'extrinsics': extrinsics,  # [n_views, 4, 4]
+            'tsdf_list_full': tsdf_list,  # list[3]: fine, mid, coarse
+            'vol_origin': meta['vol_origin'],  # global TSDF vloume origin
             'scene': meta['scene'],
             'fragment': meta['scene'] + '_' + str(meta['fragment_id']),
             'epoch': [self.epoch],
@@ -112,4 +112,19 @@ class ScanNetDataset(Dataset):
 
         if self.transforms is not None:
             items = self.transforms(items)
+
+        """
+        After transforms:
+        items = {
+            "imgs": [n_views, 3, H, W]
+            "tsdf_list": list[3]: [96, 96, 96], [48, 48, 48], [24, 24, 24]
+            "occ_list": same as above
+            "vol_origin": [3]
+            "vol_origin_partial": [3]
+            "proj_matrices": [n_views, 3, 4, 4]
+            "world_to_aligned_camera": [4, 4]
+            "scene": str
+            "fragment": str
+        }
+        """
         return items

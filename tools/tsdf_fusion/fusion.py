@@ -439,28 +439,28 @@ def integrate(
         cam_intr,
         cam_pose,
         obs_weight,
-        world_c,
-        vox_coords,
-        weight_vol,
-        tsdf_vol,
+        world_c,  # world coordinates [Nv, 4]
+        vox_coords,  # [Nv, 3]
+        weight_vol,  # [Nx, Ny, Nz]
+        tsdf_vol,  # [Nx, Ny, Nz]
         sdf_trunc,
         im_h,
         im_w,
 ):
     # Convert world coordinates to camera coordinates
-    world2cam = torch.inverse(cam_pose)
-    cam_c = torch.matmul(world2cam, world_c.transpose(1, 0)).transpose(1, 0).float()
+    world2cam = torch.inverse(cam_pose)  # [4, 4]
+    cam_c = torch.matmul(world2cam, world_c.transpose(1, 0)).transpose(1, 0).float()  # [Nv, 4]
 
     # Convert camera coordinates to pixel coordinates
     fx, fy = cam_intr[0, 0], cam_intr[1, 1]
     cx, cy = cam_intr[0, 2], cam_intr[1, 2]
     pix_z = cam_c[:, 2]
-    pix_x = torch.round((cam_c[:, 0] * fx / cam_c[:, 2]) + cx).long()
-    pix_y = torch.round((cam_c[:, 1] * fy / cam_c[:, 2]) + cy).long()
+    pix_x = torch.round((cam_c[:, 0] * fx / cam_c[:, 2]) + cx).long()  # [Nv]
+    pix_y = torch.round((cam_c[:, 1] * fy / cam_c[:, 2]) + cy).long()  # [Nv]
 
     # Eliminate pixels outside view frustum
     valid_pix = (pix_x >= 0) & (pix_x < im_w) & (pix_y >= 0) & (pix_y < im_h) & (pix_z > 0)
-    valid_vox_x = vox_coords[valid_pix, 0]
+    valid_vox_x = vox_coords[valid_pix, 0]  # [N_frustum]
     valid_vox_y = vox_coords[valid_pix, 1]
     valid_vox_z = vox_coords[valid_pix, 2]
     depth_val = depth_im[pix_y[valid_pix], pix_x[valid_pix]]
@@ -468,12 +468,12 @@ def integrate(
     # Integrate tsdf
     depth_diff = depth_val - pix_z[valid_pix]
     dist = torch.clamp(depth_diff / sdf_trunc, max=1)
-    valid_pts = (depth_val > 0) & (depth_diff >= -sdf_trunc)
+    valid_pts = (depth_val > 0) & (depth_diff >= -sdf_trunc)  # points with valid depth AND before negative truncation
     valid_vox_x = valid_vox_x[valid_pts]
     valid_vox_y = valid_vox_y[valid_pts]
     valid_vox_z = valid_vox_z[valid_pts]
     valid_dist = dist[valid_pts]
-    w_old = weight_vol[valid_vox_x, valid_vox_y, valid_vox_z]
+    w_old = weight_vol[valid_vox_x, valid_vox_y, valid_vox_z]  # [N_valid]
     tsdf_vals = tsdf_vol[valid_vox_x, valid_vox_y, valid_vox_z]
     w_new = w_old + obs_weight
     tsdf_vol[valid_vox_x, valid_vox_y, valid_vox_z] = (w_old * tsdf_vals + obs_weight * valid_dist) / w_new
@@ -516,13 +516,13 @@ class TSDFVolumeTorch:
             torch.arange(0, self._vol_dim[0]),
             torch.arange(0, self._vol_dim[1]),
             torch.arange(0, self._vol_dim[2]),
-        )
-        self._vox_coords = torch.stack([xv.flatten(), yv.flatten(), zv.flatten()], dim=1).long().to(self.device)
+        )  # [Nx, Ny, Nz]
+        self._vox_coords = torch.stack([xv.flatten(), yv.flatten(), zv.flatten()], dim=1).long().to(self.device)  # [NxNyNz, 3]
 
         # Convert voxel coordinates to world coordinates
         self._world_c = self._vol_origin + (self._voxel_size * self._vox_coords)
         self._world_c = torch.cat([
-            self._world_c, torch.ones(len(self._world_c), 1, device=self.device)], dim=1)
+            self._world_c, torch.ones(len(self._world_c), 1, device=self.device)], dim=1)  # [NxNyNz, 4]
 
         self.reset()
 
@@ -530,9 +530,9 @@ class TSDFVolumeTorch:
         # print("[*] num voxels: {:,}".format(self._num_voxels))
 
     def reset(self):
-        self._tsdf_vol = torch.ones(*self._vol_dim).to(self.device)
-        self._weight_vol = torch.zeros(*self._vol_dim).to(self.device)
-        self._color_vol = torch.zeros(*self._vol_dim).to(self.device)
+        self._tsdf_vol = torch.ones(*self._vol_dim).to(self.device)  # [Nx, Ny, Nz]
+        self._weight_vol = torch.zeros(*self._vol_dim).to(self.device)  # [Nx, Ny, Nz]
+        self._color_vol = torch.zeros(*self._vol_dim).to(self.device)  # [Nx, Ny, Nz]
 
     def integrate(self, depth_im, cam_intr, cam_pose, obs_weight):
         """Integrate an RGB-D frame into the TSDF volume.

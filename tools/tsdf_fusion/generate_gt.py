@@ -47,7 +47,7 @@ args = parse_args()
 args.save_path = os.path.join(args.data_path, args.save_name)
 
 
-def save_tsdf_full(args, scene_path, cam_intr, depth_list, cam_pose_list, color_list, save_mesh=False):
+def save_tsdf_full(args, scene_path, cam_intr, depth_list, cam_pose_list, color_list, save_mesh=True):
     # ======================================================================================================== #
     # (Optional) This is an example of how to compute the 3D bounds
     # in world coordinates of the convex hull of all camera view
@@ -184,6 +184,7 @@ def save_fragment_pkl(args, scene, cam_intr, depth_list, cam_pose_list):
     for i, bnds in enumerate(all_bnds):
         if not os.path.exists(os.path.join(args.save_path, scene, 'fragments', str(i))):
             os.makedirs(os.path.join(args.save_path, scene, 'fragments', str(i)))
+        # no fragment bound?
         fragments.append({
             'scene': scene,
             'fragment_id': i,
@@ -274,7 +275,7 @@ if __name__ == "__main__":
             args.data_path = os.path.join(args.data_path, 'scans')
         else:
             args.data_path = os.path.join(args.data_path, 'scans_test')
-        files = sorted(os.listdir(args.data_path))
+        files = sorted(os.listdir(args.data_path))[1070:]
     else:
         raise NameError('error!')
 
@@ -283,6 +284,9 @@ if __name__ == "__main__":
     ray_worker_ids = []
     for w_idx in range(all_proc):
         ray_worker_ids.append(process_with_single_worker.remote(args, files[w_idx]))
+
+    # ray_worker_ids = []
+    # ray_worker_ids.append(process_with_single_worker.remote(args, [files[1]]))
 
     results = ray.get(ray_worker_ids)
 
